@@ -62,7 +62,6 @@ mainloop' img = do let (img', file) = V.splitAt (7500) img
 
 mainloop:: ViewPort -> Float -> Vector Int -> IO (Vector Int)
 mainloop _ _ img = do let leng = V.length img 
-                          mainloop = 
                       img' <- if leng == (7500)
                                   then do putStr "STOP" ; return (img)
                                   else do print $(leng - 7500); im <- mainloop' img ;return (im)
