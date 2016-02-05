@@ -8,10 +8,11 @@
 #include <boost/foreach.hpp>
 #include <iostream>
 #include <random>
-#define N 6000 //入力画像データの最大数
+#include <thread>
+#define N 2000 //入力画像データの最大数
 #define V 900 //特徴ベクトルの次元
-#define H 17 //自己組織化マップの大きさ
-#define W 17
+#define H 29 //自己組織化マップの大きさ
+#define W 29
 
 using namespace std;
 using namespace cv;
@@ -19,27 +20,27 @@ using namespace cv;
 random_device rnd;
 mt19937 mt(rnd());
 
-Mat imgdatas[N]={};
+Mat imgdatas[N] ={};
 struct imgdata{float fvex[V]={}; Mat* img={};};
 struct imgdata imgd[N] = {};
 float somap[H][W][V] = {};
 Mat* imgmap[H][W] = {};
-
-extern void toimg(const int &count);
+void toimg(const int &c);
+//void picimg(const int &count);
 
 void tovec(const std::string &filepath, const int &n){
     Mat src_img = imread(filepath);
     Mat img;
-    resize(src_img,img,Size(96,96));
+    resize(src_img,img,Size(96,96),CV_INTER_CUBIC);
     cvtColor(img, img, CV_RGB2GRAY);
     HOGDescriptor hog(Size(96,96),Size(32,32),Size(16,16),Size(16,16),9,-1,0.2,true,64);
     std::vector<Point> locations;
     std::vector<float> featureVec;
     hog.compute(img,featureVec,Size(0,0),Size(0,0), locations);
     //std::cout << featureVec.size();
-    resize(src_img,src_img,Size(50,50));
-    cvtColor(src_img, src_img, CV_RGB2GRAY);
-    equalizeHist(src_img, src_img);
+    resize(src_img,src_img,Size(30,30),CV_INTER_CUBIC);
+    //cvtColor(src_img, src_img, CV_RGB2GRAY,CV_INTER_CUBIC);
+    //equalizeHist(src_img, src_img);
     normalize(src_img, src_img, 0, 255, NORM_MINMAX);
     for(int i=0;i<n;i++)imgd[n].fvex[i]=featureVec[i];
     imgdatas[n] = src_img;
@@ -63,13 +64,13 @@ int fetchdata(const int argc, const char *argv[]){
 }
 
 void initialize(const int &c){
-    cout<<c; 
+    //cout<<c; 
     uniform_int_distribution<> randV(0, c); 
     int temp=0;
     for(int i=0; i<H;i++){
         for(int j=0; j<W;j++){
             temp =randV(mt);
-            cout<<temp<<endl;
+            //cout<<temp<<endl;
             for(int n=0;n<V;n++)somap[i][j][n] =imgd[temp].fvex[n];
             //imgmap[i][j] = imgd[temp].img;
         }
@@ -101,8 +102,9 @@ float findnear(const int &n,int &x,int &y){
                 }
                 dist[i][j] = sqrtl(dist[i][j]);
             }
-        }
+        }//cout<<n;
     }
+    //cout<<n;
     for(int i=0; i<H;i++){
         for(int j=0; j<W; j++){
             if(dist[i][j]<=min){
@@ -128,10 +130,13 @@ void train(const int &n,const int x,const int y){
     double dist;
     double vic;
     float tdata[V];
-    if(n>(9*N/10)){vic=sqrtl(2.0*powl(20.0,2));}
-    else if(n>(8*N/10)){vic = sqrtl(2.0*powl(15.0,2));}
-    else if(n>(7*N/10)){vic = sqrtl(2.0*powl(10.0,2));}
-    else if(n>(5*N/10)){vic = sqrtl(2.0*powl(5.0,2));}
+    if(n==N){vic=sqrtl(2.0*powl(30.0,2));}
+    else if(n>(99*N/100)){vic=sqrtl(2.0*powl(10.0,2));}
+    else if(n>(95*N/100)){vic = sqrtl(2.0*powl(7.0,2));}
+    else if(n>(9*N/10)){vic = sqrtl(2.0*powl(6.0,2));}
+    else if(n>(85*N/100)){vic = sqrtl(2.0*powl(5.0,2));}
+    else if(n>(8*N/10)){vic = sqrtl(2.0*powl(4.0,2));}
+    else if(n>(6*N/10)){vic = sqrtl(2.0*powl(3.0,2));}
     else if(n>(N/10)){vic = sqrtl(2.0*powl(2.0,2));}
     else{vic = sqrtl(2.0*powl(1.0,2));}
     memcpy(tdata,imgd[n].fvex,sizeof(float)*V);
@@ -144,11 +149,13 @@ void train(const int &n,const int x,const int y){
             dist = sqrtl((powl(i-y,2)+powl(j-x,2)));
             if(dist<vic){
                 //cout<<dist<<" ";
-                if(dist==0&&n>(9*N/10)){for(int k=0; k<V;k++)somap[i][j][k]=tdata[k];}
+                if(dist==0&&n>(99*N/100)){for(int k=0; k<V;k++)somap[i][j][k]=tdata[k];}
                 else if(dist==0){w = 1;}
-                else if(n>(7*N/10)){w = sqrtl((1.0/(double)dist));}
-                else if(n>(3*N/10)){w = (1.0/(double)dist);}
-                else{w = 1.0/(dist*2.0);}
+                else if(n>(99*N/100)){w = sqrtl((1.0/(double)dist));}
+                else if(n>(8*N/10)){w = (1.0/(double)dist);}
+                else if(n>(5*N/10)){w = (1.0/(dist*2.0));}
+                else if(n>(3*N/10)){w = (1.0/(dist*3.0));}
+                else{w = 1.0/(dist*4.0);}
                 //cout<<w<<"\n";
                 for(int k=0; k<V;k+=9){
                 somap[i][j][k]=(double)somap[i][j][k]+(w*(double)(tdata[k]-somap[i][j][k]));
@@ -166,18 +173,44 @@ void train(const int &n,const int x,const int y){
     }
 }
 
-void som(const int &c,const int &max){
+void somcomput(const int c,int &n,const int max){
     uniform_int_distribution<> randc(0, c);
     int x,y;
     int temp;
-    for(int n=0;n<max;n+=1){
-        x=0; y=0;
+    //cout<<c<<" "<<n<<"/"<<max<<endl;
+    //cout<<max<<endl;
+   //cout<<n<<endl;
+    for(;n<=max;n++){
+        //cout<<c<<" "<<n<<"/"<<max<<endl;
+        x=0; y=0; 
         temp= randc(mt);
+        //cout<<temp;
         findnear(temp,x,y);
-        //cout<<n<<" "<<" "<<x<<" "<<y<<endl;
-        if(x==INT_MAX&&y==INT_MAX)continue;
-        train(temp,x,y);
+        if(x!=INT_MAX||y!=INT_MAX){
+            train(temp,x,y);
+        }
     }
+}
+
+void showimg(const int c,const int &n,const int max){
+    for(;n<=max;){
+        cout<<n<<"/"<<max<<endl;
+        toimg(c);
+        waitKey(1);
+        chrono::milliseconds waittime( 500 );
+        this_thread::sleep_for(chrono::milliseconds(waittime));
+    }
+    toimg(c);
+    waitKey(0);
+}
+
+inline void som(const int &c,const int &max){
+    int n=0;
+    //cout<<flush<<c<<" "<<n<<"/"<<max<<endl;
+    thread t1(somcomput,c,ref(n),max);
+    thread t2(showimg,c,ref(n),max);
+    t1.join();
+    t2.join();
 }
 
 void picimg(const int &c){
@@ -215,28 +248,33 @@ void picimg(const int &c){
     }
 }
 
-void toimg(const int &count){
-    Mat combined_img,tmp[H];
-    picimg(count-1);
-    #ifdef _OPENMP
-    #pragma omp parallel for 
-    #endif
+void toimg(const int &c){
+    picimg(c);
+    Mat combined_img(Size(W*imgmap[0][0]->cols,H*imgmap[0][0]->rows),CV_8UC3);
+    int width = imgmap[0][0]->cols;
+    int height = imgmap[0][0]->rows;
+    Rect roi_rect;
+    roi_rect.width = width;
+    roi_rect.height = height;
     for(int i=0;i<H;i++){
-        hconcat(*imgmap[i],W,tmp[i]);
+        for(int j=0;j<W;j++){
+             Mat roi(combined_img, roi_rect);
+             imgmap[i][j]->copyTo(roi);
+             roi_rect.x +=width;
+        }
+        roi_rect.x =0;
+        roi_rect.y +=height;
     }
-    vconcat(tmp,H,combined_img);
     imshow("SOM",combined_img);
 }
 
 
 int main(const int argc, const char *argv[]){
-    //cout<<(sizeof(imgd))<<"\n";
     const int count = fetchdata(argc,argv);
     initialize(count-1);
-    som(count-1,10000*1000);
-    namedWindow("SOM");
-    toimg(count);
+    //namedWindow("SOM");
+    //constexpr int max = 10000;
+    som(count-1,10000*100);
     //imshow("test",*imgmap[0][0]);
     //out <<imgmap[1][0]<<" "<<imgmap[10][0];
-    waitKey(0);
 }
