@@ -25,8 +25,8 @@ struct imgdata{float fvex[V]={}; Mat* img={};};
 struct imgdata imgd[N] = {};
 float somap[H][W][V] = {};
 Mat* imgmap[H][W] = {};
-void toimg(const int &c);
-//void picimg(const int &count);
+inline void toimg(const int &c);
+inline void picimg(const int &c,const int &i,const int &j);
 
 void tovec(const std::string &filepath, const int &n){
     Mat src_img = imread(filepath);
@@ -40,7 +40,7 @@ void tovec(const std::string &filepath, const int &n){
     //std::cout << featureVec.size();
     resize(src_img,src_img,Size(40,40),CV_INTER_CUBIC);
     cvtColor(src_img, src_img, CV_RGB2GRAY,CV_INTER_CUBIC);
-    //equalizeHist(src_img, src_img);
+    equalizeHist(src_img, src_img);
     normalize(src_img, src_img, 0, 255, NORM_MINMAX);
     for(int i=0;i<n;i++)imgd[n].fvex[i]=featureVec[i];
     imgdatas[n] = src_img;
@@ -56,7 +56,7 @@ int fetchdata(const int argc, const char *argv[]){
     #endif
     for(int i=1; i<argc; i++){
         fs::path path(argv[i]);
-        BOOST_FOREACH(const fs::path& p, std::make_pair(fs::recursive_directory_iterator(path),fs::recursive_directory_iterator())) {
+        BOOST_FOREACH(const fs::path& p, make_pair(fs::recursive_directory_iterator(path),fs::recursive_directory_iterator())) {
                 tovec(p.string(),n++);
         }
     }
@@ -72,35 +72,34 @@ void initialize(const int &c){
             temp =randV(mt);
             //cout<<temp<<endl;
             for(int n=0;n<V;n++)somap[i][j][n] =imgd[temp].fvex[n];
-            //imgmap[i][j] = imgd[temp].img;
+            imgmap[i][j] = imgd[temp].img;
         }
     }
 }
 
 float findnear(const int &n,int &x,int &y){
-    double dist[H][W];
-    double min=DBL_MAX;
+    float dist[H][W];
+    float min=FLT_MAX;
     vector<int> xs;
     vector<int> ys;
     {
         #ifdef _OPENMP
-        #pragma omp parallel for 
+        #pragma omp parallel for num_threads(4) schedule(static)
         #endif
         for(int i=0; i<H;i++){
             for(int j=0; j<W;j++){
                 dist[i][j] = 0;
                 for(int k=0; k<V;k+=9){
-                    dist[i][j]+=powl((double)(imgd[n].fvex[k]-somap[i][j][k]),2);
-                    dist[i][j]+=powl((double)(imgd[n].fvex[k+1]-somap[i][j][k+1]),2);
-                    dist[i][j]+=powl((double)(imgd[n].fvex[k+2]-somap[i][j][k+2]),2);
-                    dist[i][j]+=powl((double)(imgd[n].fvex[k+3]-somap[i][j][k+3]),2);
-                    dist[i][j]+=powl((double)(imgd[n].fvex[k+4]-somap[i][j][k+4]),2);
-                    dist[i][j]+=powl((double)(imgd[n].fvex[k+5]-somap[i][j][k+5]),2);
-                    dist[i][j]+=powl((double)(imgd[n].fvex[k+6]-somap[i][j][k+6]),2);
-                    dist[i][j]+=powl((double)(imgd[n].fvex[k+7]-somap[i][j][k+7]),2);
-                    dist[i][j]+=powl((double)(imgd[n].fvex[k+8]-somap[i][j][k+8]),2);
+                    dist[i][j]+=fabsf(imgd[n].fvex[k]-somap[i][j][k]);
+                    dist[i][j]+=fabsf(imgd[n].fvex[k+1]-somap[i][j][k+1]);
+                    dist[i][j]+=fabsf(imgd[n].fvex[k+2]-somap[i][j][k+2]);
+                    dist[i][j]+=fabsf(imgd[n].fvex[k+3]-somap[i][j][k+3]);
+                    dist[i][j]+=fabsf(imgd[n].fvex[k+4]-somap[i][j][k+4]);
+                    dist[i][j]+=fabsf(imgd[n].fvex[k+5]-somap[i][j][k+5]);
+                    dist[i][j]+=fabsf(imgd[n].fvex[k+6]-somap[i][j][k+6]);
+                    dist[i][j]+=fabsf(imgd[n].fvex[k+7]-somap[i][j][k+7]);
+                    dist[i][j]+=fabsf(imgd[n].fvex[k+8]-somap[i][j][k+8]);
                 }
-                dist[i][j] = sqrtl(dist[i][j]);
             }
         }//cout<<n;
     }
@@ -115,8 +114,8 @@ float findnear(const int &n,int &x,int &y){
         }
     }
     if(min==FLT_MAX){
-        x=INT_MAX;y=INT_MAX;
-        return (float)min;
+        x=0;y=0;
+        return -1.0;
     }
     uniform_int_distribution<> randin(0, xs.size()-1); 
     int index = randin(mt);
@@ -126,48 +125,52 @@ float findnear(const int &n,int &x,int &y){
     return min;
 }
 
-void train(const int &n,const int x,const int y){
-    double dist;
-    double vic;
+void train(const int &n,const int &c,const int x,const int y){
+    int dist;
+    int vic;
     float tdata[V];
-    if(n==N){vic=sqrtl(2.0*powl(20.0,2));}
-    else if(n>(99*N/100)){vic=sqrtl(2.0*powl(9.0,2));}
-    else if(n>(95*N/100)){vic = sqrtl(2.0*powl(5.0,2));}
-    else if(n>(9*N/10)){vic = sqrtl(2.0*powl(3.0,2));}
-    else if(n>(85*N/100)){vic = sqrtl(2.0*powl(3.0,2));}
-    else if(n>(8*N/10)){vic = sqrtl(2.0*powl(2.0,2));}
-    else if(n>(6*N/10)){vic = sqrtl(2.0*powl(2.0,2));}
-    else if(n>(5*N/10)){vic = sqrtl(2.0*powl(1.0,2));}
+    if(n==N){vic=10;}
+    else if(n<(10000)){vic= 8;}
+    else if(n<(20000)){vic = 7;}
+    else if(n<(40000)){vic = 6;}
+    else if(n<(80000)){vic = 5;}
+    else if(n<(160000)){vic = 4;}
+    else if(n<(320000)){vic = 3;}
+    else if(n<(1000000)){vic = 2;}
     else{vic = 1;}
     memcpy(tdata,imgd[n].fvex,sizeof(float)*V);
     #ifdef _OPENMP
-    #pragma omp parallel for 
+    #pragma omp parallel for num_threads(4) schedule(dynamic,1)
     #endif
     for(int i=0;i<H;i++){
-        double w;
+        float w;
         for(int j=0;j<W;j++){
-            dist = sqrtl((powl(i-y,2)+powl(j-x,2)));
+            dist = abs(i-y)+abs(j-x);
             if(dist<vic){
                 //cout<<dist<<" ";
                 if(dist==0&&n>(99*N/100)){for(int k=0; k<V;k++)somap[i][j][k]=tdata[k];}
                 else if(dist==0){w = 1;}
-                else if(n>(99*N/100)){w = sqrtl((1.0/(double)dist));}
-                else if(n>(8*N/10)){w = (1.0/(double)dist);}
-                else if(n>(5*N/10)){w = (1.0/(dist*2.0));}
-                else if(n>(3*N/10)){w = (1.0/(dist*3.0));}
-                else{w = 1.0/(dist*4.0);}
+                else if(n>(99*N/100)){w = sqrtf((1.0/(float)dist));}
+                else if(n>(9*N/10)){w = (1.0/(float)dist);}
+                else if(n>(8*N/10)){w = (1.0/((float)dist*2.0));}
+                else if(n>(5*N/10)){w = (1.0/((float)dist*3.0));}
+                else{w = 1.0/((float)dist*4.0);}
                 //cout<<w<<"\n";
+                //#ifdef _OPENMP
+                //#pragma omp parallel for num_threads(4) schedule(static)
+                //#endif
                 for(int k=0; k<V;k+=9){
-                somap[i][j][k]=(double)somap[i][j][k]+(w*(double)(tdata[k]-somap[i][j][k]));
-                somap[i][j][k+1]=(double)somap[i][j][k+1]+(w*(double)(tdata[k+1]-somap[i][j][k+1]));
-                somap[i][j][k+2]=(double)somap[i][j][k+2]+(w*(double)(tdata[k+2]-somap[i][j][k+2]));
-                somap[i][j][k+3]=(double)somap[i][j][k+3]+(w*(double)(tdata[k+3]-somap[i][j][k+3]));
-                somap[i][j][k+4]=(double)somap[i][j][k+4]+(w*(double)(tdata[k+4]-somap[i][j][k+4]));
-                somap[i][j][k+5]=(double)somap[i][j][k+5]+(w*(double)(tdata[k+5]-somap[i][j][k+5]));
-                somap[i][j][k+6]=(double)somap[i][j][k+6]+(w*(double)(tdata[k+6]-somap[i][j][k+6]));
-                somap[i][j][k+7]=(double)somap[i][j][k+7]+(w*(double)(tdata[k+7]-somap[i][j][k+7]));
-                somap[i][j][k+8]=(double)somap[i][j][k+8]+(w*(double)(tdata[k+8]-somap[i][j][k+8]));
+                somap[i][j][k]=somap[i][j][k]+(w*(tdata[k]-somap[i][j][k]));
+                somap[i][j][k+1]=somap[i][j][k+1]+(w*(tdata[k+1]-somap[i][j][k+1]));
+                somap[i][j][k+2]=somap[i][j][k+2]+(w*(tdata[k+2]-somap[i][j][k+2]));
+                somap[i][j][k+3]=somap[i][j][k+3]+(w*(tdata[k+3]-somap[i][j][k+3]));
+                somap[i][j][k+4]=somap[i][j][k+4]+(w*(tdata[k+4]-somap[i][j][k+4]));
+                somap[i][j][k+5]=somap[i][j][k+5]+(w*(tdata[k+5]-somap[i][j][k+5]));
+                somap[i][j][k+6]=somap[i][j][k+6]+(w*(tdata[k+6]-somap[i][j][k+6]));
+                somap[i][j][k+7]=somap[i][j][k+7]+(w*(tdata[k+7]-somap[i][j][k+7]));
+                somap[i][j][k+8]=somap[i][j][k+8]+(w*(tdata[k+8]-somap[i][j][k+8]));
                 }
+                picimg(c,i,j);
             }
         }
     }
@@ -175,20 +178,19 @@ void train(const int &n,const int x,const int y){
 
 void somcomput(const int c,int &n,const int max){
     uniform_int_distribution<> randc(0, c);
-    int x,y;
+    int x=0; int y=0;
     int temp;
-    //cout<<c<<" "<<n<<"/"<<max<<endl;
-    //cout<<max<<endl;
-   //cout<<n<<endl;
-    for(;n<=max;n++){
-        //cout<<c<<" "<<n<<"/"<<max<<endl;
-        x=0; y=0; 
+    //#ifdef _OPENMP
+    //#pragma omp parallel for num_threads(4) schedule(static)
+    //#endif
+    for(;n<=max;){
+        //cout<<n<<"/"<<max<<endl;
         temp= randc(mt);
         //cout<<temp;
-        findnear(temp,x,y);
-        if(x!=INT_MAX||y!=INT_MAX){
-            train(temp,x,y);
-        }
+        if(findnear(temp,x,y)>=0)train(temp,c,x,y);
+        //#pragma omp atomic
+        //n++;
+        n++;
     }
 }
 
@@ -197,7 +199,7 @@ void showimg(const int c,const int &n,const int max){
         //cout<<n<<"/"<<max<<endl;
         toimg(c);
         waitKey(1);
-        chrono::milliseconds waittime( 500 );
+        chrono::milliseconds waittime( 298 );
         this_thread::sleep_for(chrono::milliseconds(waittime));
     }
     toimg(c);
@@ -213,40 +215,32 @@ inline void som(const int &c,const int &max){
     t2.join();
 }
 
-void picimg(const int &c){
+inline void picimg(const int &c,const int &i,const int &j){
     uniform_int_distribution<> randk(0, c); 
     int count = c*10;
-    #ifdef _OPENMP
-    #pragma omp parallel for 
-    #endif
-    for(int i=0; i<H;i++){
-        for(int j=0; j<W;j+=1){
-            int x=0;
-            float min=FLT_MAX;
-            vector<int> index;
-            //int tmp=randk(mt);
-            for(int k=0;k<count;k++){
-                float dist = 0;
-                int tmp=randk(mt);
-                for(int l=0; l<V;l+=1){
-                    dist+=fabsf(imgd[tmp].fvex[l]-somap[i][j][l]);
-                }
-                if(dist<=min){
-                min = dist;
-                index.push_back(tmp);
-                }
-            }
-            uniform_int_distribution<> randi(0, index.size()-1); 
-            //int tmp = index[randi(mt)];
-            //cout<<tmp<<endl;;
-            imgmap[i][j] = imgd[index[randi(mt)]].img;
-            index.clear();
+    int x=0;
+    float min=FLT_MAX;
+    vector<int> index;
+    //int tmp=randk(mt);
+    for(int k=0;k<count;k++){
+        float dist = 0;
+        int tmp=randk(mt);
+        for(int l=0; l<V;l+=1){
+            dist+=fabsf(imgd[tmp].fvex[l]-somap[i][j][l]);
+        }
+        if(dist<=min){
+        min = dist;
+        index.push_back(tmp);
         }
     }
+    uniform_int_distribution<> randi(0, index.size()-1); 
+    //int tmp = index[randi(mt)];
+    //cout<<tmp<<endl;;
+    imgmap[i][j] = imgd[index[randi(mt)]].img;
+    index.clear();
 }
 
-void toimg(const int &c){
-    picimg(c);
+inline void toimg(const int &c){
     Mat combined_img(Size(W*imgmap[0][0]->cols,H*imgmap[0][0]->rows),CV_8U);
     int width = imgmap[0][0]->cols;
     int height = imgmap[0][0]->rows;
@@ -271,7 +265,7 @@ int main(const int argc, const char *argv[]){
     initialize(count-1);
     //namedWindow("SOM");
     //constexpr int max = 10000;
-    som(count-1,10000*10);
+    som(count-1,10000*10000);
     //imshow("test",*imgmap[0][0]);
     //out <<imgmap[1][0]<<" "<<imgmap[10][0];
 }
