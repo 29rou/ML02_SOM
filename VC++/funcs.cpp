@@ -1,74 +1,76 @@
 #include "som.h"
 
-void initialize(imgdata *src, somap *dst) {
-	dst->img = src->img;
-	*dst->fvex = *src->fvex;
-	//cout << dst->fvex<<" "<<src->fvex<<endl;
+somap* initialize(imgdata *imgd) {
+	somap *ptr = new somap[HW];
+	vector<int> chk;
+	int *tmp = new int[HW];
+#ifdef _OPENMP
+	omp_set_num_threads(8);
+#pragma omp parallel for schedule(static)
+#endif
+	for (int i = 0; i < HW; i++) {
+		do {
+			tmp[i] = imgd->rand();
+		} while (find(chk.begin(), chk.end(), tmp[i]) != chk.end());
+		for (int k = 0; k < F; k++) {
+			if (isinf(imgd[tmp[i]].fvex[k])) {
+				ptr[i].fvex[k] = FLT_MAX;
+			}
+			else if (isnan(imgd[tmp[i]].fvex[k])) {
+				ptr[i].fvex[k] = 0;
+			}
+			else ptr[i].fvex[k] = imgd[tmp[i]].fvex[k];
+		}
+#pragma omp critical
+		chk.push_back(tmp[i]);
+	}
+	delete[] tmp;
+	return ptr;
+}
+
+Mat* toimg(imgdata* imgd,somap *smp, Mat* combined_img) {
+	Rect roi_rect;
+	roi_rect.width = WIDTH;
+	roi_rect.height = HEIGHT;
+	for (int i = 0; i <HW; i++) {
+		if ((smp[i].x % 3 == 1) && (smp[i].y % 3 == 1)) {
+			Mat roi(*combined_img, roi_rect);
+			smp[i].picimg(imgd)->copyTo(roi);
+			roi_rect.x += WIDTH;
+		}
+		if ((smp[i].x == W-1) && (smp[i].y % 3 == 1)) {
+			roi_rect.x = 0;
+			roi_rect.y += HEIGHT;
+		}
+	}
+	return combined_img;
 }
 
 float operator-(const imgdata &obj1, const somap &obj2) {
-	float r = 0;
-	__m256 tmp[f];
-	//__m256 tmp2[f];
+	__m256 *tmp = (__m256*)_aligned_malloc(sizeof(__m256)*f, 32);
 	__m256 *v1 = (__m256*)(obj1.fvex);
 	__m256 *v2 = (__m256*)(obj2.fvex);
+	const __m256 signmask = _mm256_set1_ps(-0.0f); // 0x80000000
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static)
+#pragma omp parallel
 #endif
-	for (int i = 0; i <f; i++) {
-		//cout << i << endl;
-		tmp[i] = _mm256_sub_ps(*v1, *v2);
-		//tmp2[i] = _mm256_mul_ps(tmp[i], tmp[i]);
-		int rtmp = fabs(tmp[i].m256_f32[0]);
-		rtmp += fabs(tmp[i].m256_f32[1]);
-		rtmp += fabs(tmp[i].m256_f32[2]);
-		rtmp += fabs(tmp[i].m256_f32[3]);
-		rtmp += fabs(tmp[i].m256_f32[4]);
-		rtmp += fabs(tmp[i].m256_f32[5]);
-		rtmp += fabs(tmp[i].m256_f32[6]);
-		rtmp += fabs(tmp[i].m256_f32[7]);
-#pragma omp atomic
-		r += rtmp;
-#pragma omp atomic
-		v1++;
-#pragma omp atomic
-		v2++;
+	{
+#ifdef _OPENMP
+#pragma omp for schedule(static)
+#endif
+		for (int i = 0; i < f; i++)tmp[i] = _mm256_sub_ps(*(v1 + i), *(v2 + i));
+#ifdef _OPENMP
+#pragma omp for schedule(static)
+#endif
+		for (int i = 0; i < f; i++)tmp[i] = _mm256_andnot_ps(signmask, tmp[i]);
 	}
-/*#ifdef _OPENMP
-#pragma omp parallel for
-#endif
+	__m256 sum = _mm256_set1_ps(0);
 	for (int i = 0; i < f; i++) {
-		int rtmp = tmp2[i].m256_f32[0];
-		rtmp += tmp2[i].m256_f32[1];
-		rtmp += tmp2[i].m256_f32[2];
-		rtmp += tmp2[i].m256_f32[3];
-		rtmp += tmp2[i].m256_f32[4];
-		rtmp += tmp2[i].m256_f32[5];
-		rtmp += tmp2[i].m256_f32[6];
-		rtmp += tmp2[i].m256_f32[7];
-		
-#pragma omp atomic
-		r += rtmp;
-	}*/
-	//_m256 dst = _mm256_sub_ps((obj1.fvex));
-	return r;//sqrtf(r);
-}
-
-somap* findnear(const imgdata *imgd, somap *smp) {
-	random_device rnd;
-	mt19937_64 mt(rnd());
-	float min = FLT_MAX;
-	float tmp;
-	vector<int> is;
-	for (int i = 0; i < HW; i++) {
-		tmp = *imgd - smp[i];
-		if (tmp <= min) {
-			min = tmp;
-			is.push_back(i);
-		}
+		sum = _mm256_sub_ps(sum, tmp[i]);
 	}
-	if (is.empty())return 0;
-	uniform_int_distribution<> randin(0, (is.size() - 1));
-	somap* num = smp + is[randin(mt)];
-	return num;
+	float r=0;
+#pragma omp parallel for reduction(+:r) 
+	for (int i = 0; i < 8; i++)r += sum.m256_f32[i];
+	_aligned_free(tmp);
+	return r;
 }

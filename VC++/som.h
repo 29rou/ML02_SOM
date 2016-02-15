@@ -17,52 +17,53 @@
 using namespace std;
 using namespace cv;
 
-#define N  10000*100
-#define F  900
-constexpr int F256 = (900 / 8 + 1)*8;
+constexpr int  N = 10000 * 100;
+constexpr int  F = 65025;
+constexpr int F256 = (F / 8 + 1)*8;
 constexpr int f = F256 / 8;
-#define P  8
-#define H 20
-#define W 20
+constexpr int f2 = (f / 8 + 1) * 8;
+constexpr int P = 8;
+constexpr int H = 99;
+constexpr int W = 99;
 constexpr int HW = H*W;
-#define HEIGHT 40
-#define WIDTH 40
-
+constexpr int HEIGHT = 100;
+constexpr int WIDTH = 100;
 
 class somap;
 
 class imgdata
 {
-	friend void initialize(imgdata *src, somap *dst);
+	friend somap* initialize(imgdata *imgd);
 	friend float operator-(const imgdata &obj1,const somap &obj2);
-	friend somap* findnear(const imgdata *imgd, somap *smp);
 public:
 	imgdata();
 	~imgdata();
-	static int num;
-	void loadimg(const string &filepath);
 	Mat *img;
 	float *fvex;
+	int rand();
+	void loadimg(const string &filepath);
+	somap* findnear(somap *smp);
+	static int num;
 private:
 	
+	static mt19937 mt;
 };
 
 class somap
 {
-	friend void initialize(imgdata *src, somap *dst);
+	friend somap* initialize(imgdata *imgd);
+	friend Mat* toimg(imgdata* imgd,somap *smp, Mat* combined_img);
 	friend float operator-(const imgdata &obj1,const somap &obj2);
-	friend somap* findnear(const imgdata *imgd, somap *smp);
 public:
 	somap();
 	~somap();
-	Mat *img;
-	int x, y;
-	void picimg(imgdata *imgd);
+	Mat* picimg(imgdata *imgd);
+	int rand();
 	void train(imgdata *imgd, imgdata *test, somap* smp,const int count);
 private:
 	static int num;
+	static mt19937 mt;
+	int x, y;
 	float *fvex;
+	//imgdata *setdata;
 };
-
-
-
