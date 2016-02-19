@@ -17,17 +17,16 @@
 using namespace std;
 using namespace cv;
 
-constexpr int  N = 10000 * 100;
-constexpr int  F = 65025;
+constexpr int  F = 9216;
 constexpr int F256 = (F / 8 + 1)*8;
 constexpr int f = F256 / 8;
 constexpr int f2 = (f / 8 + 1) * 8;
 constexpr int P = 8;
-constexpr int H = 99;
-constexpr int W = 99;
+constexpr int H = 30;
+constexpr int W = 30;
 constexpr int HW = H*W;
-constexpr int HEIGHT = 100;
-constexpr int WIDTH = 100;
+constexpr int HEIGHT = 50;
+constexpr int WIDTH = 50;
 
 class somap;
 
@@ -59,7 +58,7 @@ public:
 	~somap();
 	Mat* picimg(imgdata *imgd);
 	int rand();
-	void train(imgdata *imgd, imgdata *test, somap* smp,const int count);
+	void train(imgdata *imgd, imgdata *test, somap* smp,const int count, const int *vic);
 private:
 	static int num;
 	static mt19937 mt;

@@ -14,7 +14,7 @@
 			CFileFind find2;
 			string tmpath = find.GetFilePath();
 			SetCurrentDirectory(tmpath.c_str());
-			BOOL bFinding2 = find2.FindFile("*.jpg");
+			BOOL bFinding2 = find2.FindFile("*.png");
 			while (bFinding2) {
 				bFinding2 = find2.FindNextFile();
 				if (find2.IsDirectory()==0) {
@@ -37,7 +37,6 @@ imgdata* img_tovec(vector<string> *filepath) {
 	uniform_int_distribution<> randf(0, filenum-1);
 	int *tmp = new int[filenum];
 #ifdef _OPENMP
-	omp_set_num_threads(8);
 #pragma omp parallel for schedule(static)
 #endif
 	for (int i = 0; i < filenum; i++) {
@@ -62,8 +61,7 @@ imgdata* load_img(const string &path) {
 	return ptr;
 }
 
-void mkimg(imgdata* imgd, somap* smp, Mat* cmbimg) {
-	cmbimg = toimg(imgd,smp, cmbimg);
+void mkimg(Mat* cmbimg) {
 	imshow("SOMing", *cmbimg);
 	waitKey(0);
 }
@@ -72,45 +70,54 @@ void outputimg(imgdata* imgd, somap* smp, const int count,Mat* cmbimg) {
 	cmbimg = toimg(imgd,smp, cmbimg);
 	string outputstr = ".\\output\\output" + to_string(count) + ".jpg";
 	imwrite(outputstr, *cmbimg);
-	waitKey(0);
+	//imshow("SOMing", *cmbimg);
+	waitKey(1);
+}
+
+int setvic(const int &count) {
+	int vic = 1;
+	if (count<(10)) { vic += HW; }
+	else if (count<(10000)) { vic += H; }
+	else if (count<(20000)) { vic += H/2; }
+	else if (count<(40000)) { vic += H/2; }
+	else if (count<(80000)) { vic += H/2; }
+	else if (count<(160000)) { vic += 5; }
+	else if (count<(320000)) { vic += 4; }
+	else if (count<(640000)) { vic += 1; }
+	else { vic += 3; }
+	return vic;
 }
 
 Mat* som(imgdata *imgd, somap *smp) {
 	somap* ptr;
 	imgdata* test;
-	Mat* cmbimg = new Mat(Size(W/3*WIDTH, H/3*HEIGHT), CV_8UC3);
-	//cmbimg = toimg(imgd,smp, cmbimg);
-	int num = imgd->num;
-	int *count = new int;
-	*count = 0;
-	uniform_int_distribution<> randc(0, imgd->num - 1);	
-	for (int n = 0;;n++) {
-		//thread t1(mkimg, ref(imgd), ref(smp), ref(cmbimg));
-		random_device rnd;
+	Mat* cmbimg = new Mat(Size(W*WIDTH, H*HEIGHT), CV_8UC3);
+	const int num = imgd->num;
+	random_device rnd;
+	normal_distribution<>randc((num - 1) / 2, 500.0);
+	int vic = 1;
+	for (int count =0;;) {
 		mt19937_64 mt(rnd());
-		//if (n % 10 == 0) {
-			thread t2(outputimg, ref(imgd), ref(smp), ref(*count), ref(cmbimg));
-			t2.join();
-		//}
-		for (int i = 0; i < 10000; i++) {
-			++*count;
-			printf("%020d\n", *count);
-			test = imgd + randc(mt);
+		vic = setvic(count);
+		if(count%10000==0)outputimg(imgd, smp, count, cmbimg);
+		for (int i= 0; i < 1000; i++) {
+			//outputimg(imgd, smp, count, cmbimg);
+			printf("%020d\n", count);
+			test = imgd+(int)randc(mt);
 			ptr = test->findnear(smp);
-			for (int j = 0; j < HW; j++) {
-				(smp + j)->train(imgd, test, ptr, *count);
-			}
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
+			for (int j = 0; j < HW; j++)(smp + j)->train(imgd, test, ptr, count,&vic);
+			++count;
 		}
-		//t2.detach();
 	}
-	delete count;
-	for (int i = 0; i < HW; i++)smp[i].picimg(imgd);
 	cmbimg = toimg(imgd,smp, cmbimg);
 	return cmbimg;
 }
 
 void main() {
-	string path = ".\\256_ObjectCategories\\";
+	string path = ".\\thumb\\";
 	imgdata *imgd = load_img(path);
 	//cout << "finish load" << endl;
 	somap *smp = initialize(imgd);

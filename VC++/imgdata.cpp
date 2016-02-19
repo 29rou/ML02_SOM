@@ -6,7 +6,8 @@ mt19937 imgdata::mt;
 imgdata::imgdata()
 {
 	this->fvex = (float*)_aligned_malloc(sizeof(float)*F256, 32);
-	for (int i = 0; i < F;i++)this->fvex[i] = 0;
+	//__m256 *v = (__m256*)(this->fvex);
+	//for (int i = 0; i < f;i++)v[i]= _mm256_set1_ps(0);
 	static random_device rnd;
 	this->mt.seed(rnd());
 	this->num++;
@@ -24,20 +25,13 @@ void imgdata::loadimg(const string &filepath) {
 	Mat img;
 	vector<Point> locations;
 	vector<float> featureVec;
-	resize(src_img, src_img, Size(100, 100));
+	cv::resize(src_img, src_img, Size(120, 120));
 	cvtColor(src_img, img, CV_RGB2GRAY);
-	HOGDescriptor hog(Size(100, 100), Size(20, 20), Size(5, 5), Size(4, 4), 9, -1, 0.2, true, 64);
+	HOGDescriptor hog(Size(120, 120), Size(30,30), Size(6, 6), Size(15, 15), 9, -1, 0.2, true, 64);
 	hog.compute(img, featureVec, Size(0, 0), Size(0, 0), locations);
-	if (featureVec.empty()) {
-		cout << "ERROR" << endl;
-	}
 	for (int i = 0; i < F; i++) {
-		if (isinf(featureVec[i])) {
-			this->fvex[i] = FLT_MAX;
-		}
-		else if (isnan(featureVec[i])) {
-			this->fvex[i] = 0;
-		}
+		if (isinf(featureVec[i]))this->fvex[i] = FLT_MAX;
+		else if (isnan(featureVec[i]))this->fvex[i] = 0;
 		else this->fvex[i] = featureVec[i];
 	}
 	resize(src_img, src_img, Size(WIDTH, HEIGHT), CV_INTER_CUBIC);
@@ -47,22 +41,30 @@ void imgdata::loadimg(const string &filepath) {
 
 somap* imgdata::findnear(somap *smp) {
 	float min = FLT_MAX;
-	vector<int> is;
-	float* tmp = new float[HW];
+	//vector<int> ilist;
+	int is;
+	float *tmp = new float[HW];
+	//float tmp[HW];
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
 	for (int i = 0; i < HW; i++)tmp[i] = *this - smp[i];
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
 	for (int i = 0; i < HW; i++){
-		if (tmp[i] == min) {
-			is.push_back(i);
-		}
-		else if (tmp[i] < min) {
+		if (tmp[i] < min) {
+#pragma omp critical
+		{
 			min = tmp[i];
-			is.clear();
-			is.push_back(i);
+			is = i;
+		}
 		}
 	}
 	delete[] tmp;
-	uniform_int_distribution<> randin(0, (is.size() - 1));
-	return smp + is[randin(this->mt)];
+	//uniform_int_distribution<> randin(0, (ilist.size() - 1));
+	//return smp+ilist[randin(this->mt)];
+	return smp+is;
 }
 
 int imgdata::rand() {	
