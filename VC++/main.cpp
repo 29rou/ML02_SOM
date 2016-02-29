@@ -1,7 +1,6 @@
 #include "som.h"
 
- vector<string>* find_file(const string &path) {
-	vector<string> *filepath = new vector<string>;
+void find_file(const string &path ,vector<string> &filepath) {
 	CFileFind find;
 	char tmpCurrentDir[MAX_PATH];
 	GetCurrentDirectory(sizeof(tmpCurrentDir), tmpCurrentDir);
@@ -14,11 +13,11 @@
 			CFileFind find2;
 			string tmpath = find.GetFilePath();
 			SetCurrentDirectory(tmpath.c_str());
-			BOOL bFinding2 = find2.FindFile("*.png");
+			BOOL bFinding2 = find2.FindFile("*.jpg");
 			while (bFinding2) {
 				bFinding2 = find2.FindNextFile();
-				if (find2.IsDirectory()==0) {
-					(*filepath).push_back((string)find2.GetFilePath());
+				if (find2.IsDirectory() == 0) {
+					filepath.push_back((string)find2.GetFilePath());
 					//printf("%s\n", find2.GetFilePath());
 				}
 			}
@@ -26,106 +25,73 @@
 		}
 	}
 	SetCurrentDirectory(tmpCurrentDir);
-	return filepath;
-};
+}
 
-imgdata* img_tovec(vector<string> *filepath) {
-	const int filenum = (*filepath).size();
-	imgdata *ptr = new imgdata[filenum];
-	vector<int> chk;
+void img_tovec(vector<string> &filepath, imgdatas &imgd) {
 	random_device rnd;
-	uniform_int_distribution<> randf(0, filenum-1);
-	int *tmp = new int[filenum];
+	mt19937_64 mt(rnd());
+	shuffle(filepath.begin(), filepath.end(), mt);
+	imgd.reserve(filepath.size());
+	for (int i = 0; i < filepath.size(); i++) {
+		imgd.emplace_back();
+	}
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
 #endif
-	for (int i = 0; i < filenum; i++) {
-			do {
-				tmp[i] = randf(rnd);
-			} while (find(chk.begin(), chk.end(), tmp[i]) != chk.end());
-#pragma omp critical
-			chk.push_back(tmp[i]);
-			//cout<<"load "<<(*filepath)[tmp[i]]<<"\n";
-		ptr[i].loadimg((*filepath)[tmp[i]]);
+	for (int i = 0; i < filepath.size();i++) {
+		imgd.at(i).loadimg(filepath.at(i));
 	}
-	delete[] tmp;
-	return ptr;
 }
 
-imgdata* load_img(const string &path) {
-	vector<string> *filepath = find_file(path);
-	imgdata *ptr = img_tovec(filepath);
-	(*filepath).clear();
-	(*filepath).shrink_to_fit();
-	delete filepath;
-	return ptr;
-}
-
-void mkimg(Mat* cmbimg) {
-	imshow("SOMing", *cmbimg);
-	waitKey(0);
-}
-
-void outputimg(imgdata* imgd, somap* smp, const int count,Mat* cmbimg) {
-	cmbimg = toimg(imgd,smp, cmbimg);
-	string outputstr = ".\\output\\output" + to_string(count) + ".jpg";
-	imwrite(outputstr, *cmbimg);
-	//imshow("SOMing", *cmbimg);
-	waitKey(1);
-}
-
-int setvic(const int &count) {
-	int vic = 1;
-	if (count<(10)) { vic += HW; }
-	else if (count<(10000)) { vic += H; }
-	else if (count<(20000)) { vic += H/2; }
-	else if (count<(40000)) { vic += H/2; }
-	else if (count<(80000)) { vic += H/2; }
-	else if (count<(160000)) { vic += 5; }
-	else if (count<(320000)) { vic += 4; }
-	else if (count<(640000)) { vic += 1; }
-	else { vic += 3; }
-	return vic;
-}
-
-Mat* som(imgdata *imgd, somap *smp) {
-	somap* ptr;
+void som(imgdatas *imgd, somaps &smp) {
+	pair<int,int> ptr;
 	imgdata* test;
-	Mat* cmbimg = new Mat(Size(W*WIDTH, H*HEIGHT), CV_8UC3);
-	const int num = imgd->num;
+	combinedimg cmb(*imgd, smp);
 	random_device rnd;
-	normal_distribution<>randc((num - 1) / 2, 500.0);
-	int vic = 1;
-	for (int count =0;;) {
-		mt19937_64 mt(rnd());
-		vic = setvic(count);
-		if(count%10000==0)outputimg(imgd, smp, count, cmbimg);
-		for (int i= 0; i < 1000; i++) {
-			//outputimg(imgd, smp, count, cmbimg);
-			printf("%020d\n", count);
-			test = imgd+(int)randc(mt);
+	mt19937_64 mt(rnd());
+	uniform_int_distribution<> randc(0, imgd->size() - 1);
+	for (int count = 0;;) {
+		if (count % 100000 == 0) {
+			cmb.toimg(*imgd, smp);
+			cmb.outputimg(count);
+		}
+		//cmb.outputimg(count);
+		//thread t1(showimg, ref(cmb));
+		printf("%010d\n", count);
+		for (int i = 0; i < 10000; i++,count++) {
+			test = &imgd->at(randc(mt));
 			ptr = test->findnear(smp);
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
-			for (int j = 0; j < HW; j++)(smp + j)->train(imgd, test, ptr, count,&vic);
-			++count;
+			for (int j = 0; j < H; j++) {
+				for (int k = 0; k < W; k++) {
+					smp.at(j).at(k)->setw(count, ptr,k, j);
+					smp.at(j).at(k)->train(*test);
+				}
+			}
 		}
-	}
-	cmbimg = toimg(imgd,smp, cmbimg);
-	return cmbimg;
+		//cmb.toimg(*imgd, smp);
+		//t1.detach();
+	}	
 }
 
 void main() {
-	string path = ".\\thumb\\";
-	imgdata *imgd = load_img(path);
-	//cout << "finish load" << endl;
-	somap *smp = initialize(imgd);
-	//cout << "Start!!" << endl;
-	Mat* cmbimg = som(imgd, smp);
-	delete[] smp;
-	delete[] imgd;
-	imshow("SOM", *cmbimg);
-	waitKey(0);
-	delete cmbimg;
+	somap *ptr = new somap[HW];
+	somaps smp;
+	for (int i = 0; i < smp.size(); i++) {
+		for (int j = 0; j < smp.data()->size(); j++) {
+			smp.at(i).at(j) = &ptr[i*W + j];
+		}
+	}
+	vector<string> filepath;
+	find_file(".\\gusa\\",filepath);
+	imgdatas imgd;
+	img_tovec(filepath, imgd);
+	filepath.clear();
+	filepath.shrink_to_fit();
+	normalize(imgd);
+	initializemap(imgd, smp);
+	som(&imgd, smp);
+	delete[] ptr;
 }

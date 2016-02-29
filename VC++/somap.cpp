@@ -1,85 +1,100 @@
 #include "som.h"
 
-int somap::num = 0;
-mt19937 somap::mt;
 
 somap::somap()
 {
-	//cout << num << endl;
-	this->x = this->num % W;
-	this->y = this->num / H;
-	this->fvex = (float*)_aligned_malloc(sizeof(float)*F256, 32);
-	//__m256 *v = (__m256*)(this->fvex);
-	//for (int i = 0; i < f; i++)v[i] = _mm256_set1_ps(0);
-	static random_device rnd;
-	this->mt.seed(rnd());
-	this->num++;
 }
+
 
 somap::~somap()
 {
-	_aligned_free(this->fvex);
 }
 
-Mat* somap::picimg(imgdata *imgd) {
-	vector<int> ilist;
-	float min =FLT_MAX;//*this->setdata - *this;
-	float tmp[HW];
-//#ifdef _OPENMP
-//#pragma omp parallel for schedule(static)
-//#endif
-	for (int i = 0; i < HW; i++) {
-		tmp[i] = (imgd[i] - *this);
+void somap::init(imgdata &imgd)
+{
+	for (int k = 0; k < F; k++) {
+		this->fvex[k] = imgd.fvex[k];
 	}
-//#ifdef _OPENMP
-//#pragma omp parallel for
-//#endif
-	for (int i = 0; i < HW; i++){
-		if (tmp[i] == min) {
-//#pragma omp critical
-			ilist.push_back(i);
-		}else if(tmp[i] < min){
-//#pragma omp critical
-		{
-			min = tmp[i];
-			ilist.clear();
-			ilist.push_back(i);
-		}
-		}
-	}
-	uniform_int_distribution<> randin(0, (ilist.size()-1));
-	return imgd[ilist[randin(this->mt)]].img;
 }
 
-void somap::train(imgdata *imgd,imgdata *test,somap *smp,const int count, const int *vic) {
-	int dist = abs(this->x - smp->x) + abs(this->y - smp->y)+1;
-	if (dist > *vic)return;
-	float w = 0;
-	if (count<(10)) { w = 1; }
-	else if (count<(1000))   { w = 1; }
-	else if (count<(5000))   { w = 0.9; }
-	else if (count<(20000))  { w = 0.9; }
-	else if (count<(40000))  { w = 0.9; }
-	else if (count<(840000)) { w = 0.9; }
-	else if (count<(160000)) { w = 0.009; }
-	else if (count<(320000)) { w = 0.005; }
-	else if (count<(640000)) { w = 0.002; }
-	else if (dist == 1) { w = 0.00001; }
-	else if (dist == 2) { w = 0.000009; }
-	else if (dist == 3){ w = 0.000005; }
-	else { w = 0.0005; }
+void somap::setw(const int &count, const pair<int,int> &ptr, const int &x,const int &y) {
+	if (count < 100000) {
+		int dist = abs(y - ptr.second) + abs(x - ptr.first);
+		if (count < 1000 && dist < H*1.5)this->weight = 1.0;
+		else if (count < 10000 && dist < H)this->weight = 1.0;
+		else if (count < 50000 && dist < H / 2)this->weight = 0.9;
+		else if (dist < H / 4)this->weight = 0.5;
+		//else if (count < 100000 && dist < H / 5)this->weight = 0.0001;
+		else this->weight = -1;
+	}
+	else {
+		switch (abs(y - ptr.second) + abs(x - ptr.first)) {
+		case 0:
+			this->weight = 0.001;
+			break;
+		case 1:
+		case 2:
+			this->weight = 0.0009;
+			break;
+		case 3:
+		case 4:
+			this->weight = 0.0005;
+			break;
+		case 5:
+		case 6:
+		case 7:
+		case 8:
+		case 9:
+		case 10:
+			this->weight = 0.0003;
+			break;
+		case 11:
+		case 12:
+		case 13:
+		case 14:
+		case 15:
+			this->weight = 0.0001;
+			break;
+		default:
+			this->weight = -1;
+			break;
+		}
+	}
+}
+
+void somap::train(const imgdata & obj)
+{
+	if (this->weight <= 0.0)return;
 	__m256 tmp;
-	const __m256 ws = _mm256_broadcast_ss(&w);
 	__m256 *v1 = (__m256*)(this->fvex);
-	const __m256 *v2 = (__m256*)(test->fvex);
+	const __m256 *v2 = (__m256*)(obj.fvex);
+	const __m256 ws = _mm256_set1_ps(this->weight);
 	for (int i = 0; i < f; i++) {
-		tmp = _mm256_sub_ps(*(v2 + i), *(v1 + i));
+		tmp = _mm256_sub_ps(v2[i], v1[i]);
 		tmp = _mm256_mul_ps(tmp, ws);
-		*(v1 + i) = _mm256_add_ps(*(v1 + i), tmp);
+		v1[i] = _mm256_add_ps(v1[i], tmp);
 	}
 }
 
-int somap::rand() {
-	uniform_int_distribution<> randn(0, this->num - 1);
-	return randn(this->mt);
+void somap::getnearlist(imgdatas & imgdata,vector<Mat*> &matlist)
+{
+	vector<pair<int, float>> tmp;
+	tmp.reserve(imgdata.size());
+	auto forsort = [](pair<int, float> &x, pair<int, float> &y) -> bool {
+		if (x.second > y.second)return false;
+		if (x.second < y.second)return true;
+		return false;
+	};
+	auto forunique = [](pair<int, float> &x, pair<int, float> &y) -> bool {
+		if (x.second == y.second)return true;
+		return false;
+	};
+	for (int i = 0; i < imgdata.size(); i++)tmp.push_back({ i,this->getDistance(imgdata.at(i)) });
+	sort(tmp.begin(), tmp.end(), forsort);
+	auto result = unique(tmp.begin(), tmp.end(), forunique);
+	tmp.erase(result, tmp.end());
+	matlist.reserve(imgdata.size());
+	for (auto &i : tmp) {
+		matlist.push_back(&imgdata.at(i.first).img);
+	}
 }
