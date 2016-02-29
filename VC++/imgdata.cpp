@@ -8,14 +8,14 @@ imgdata::~imgdata()
 {
 }
 
-void imgdata::loadimg(const string & filepath)
+void imgdata::loadimg(const std::string & filepath)
 {
 	Mat src_img = imread(filepath);
 	normalize(src_img, src_img, 0, 255, NORM_MINMAX);
 	//cout << filepath << "\n";
 	Mat img;
-	vector<Point> locations;
-	vector<float> featureVec;
+	std::vector<Point> locations;
+	std::vector<float> featureVec;
 	this->img = Mat::zeros(Size(WIDTH, HEIGHT), CV_8UC3);
 	HOGDescriptor hog(Size(640, 360), Size(160, 120), Size(160, 120), Size(40, 40), 9, -1, 0.2, true, 64);
 	resize(src_img, img, Size(640, 360), CV_INTER_CUBIC);
@@ -25,11 +25,11 @@ void imgdata::loadimg(const string & filepath)
 	this->img = src_img;
 }
 
-const pair<int,int> imgdata::findnear(somaps &smp) {
-	using cordinate = pair<int, int>;
-	vector<cordinate> ilist;
-	array<pair<cordinate,float>, HW> tmp;
-	auto forsort = [](pair< cordinate, float> &x, pair< cordinate, float> &y) -> bool {
+const std::pair<int,int> imgdata::findnear(somaps &smp) {
+	using cordinate = std::pair<int, int>;
+	std::vector<cordinate> ilist;
+	std::array<std::pair<cordinate,float>, HW> tmp;
+	auto forsort = [](std::pair< cordinate, float> &x, std::pair< cordinate, float> &y) -> bool {
 		if (x.second > y.second)return false; 
 		if (x.second < y.second)return true; 
 		return false; 
@@ -42,11 +42,11 @@ const pair<int,int> imgdata::findnear(somaps &smp) {
 			tmp.at(i*W + j) = { {j,i},this->getDistance(*smp.at(i).at(j)) };
 		}
 	}
-	sort(tmp.begin(),tmp.end(), forsort);
+	std::sort(tmp.begin(),tmp.end(), forsort);
 	for (auto &i:tmp) {
 		if (tmp.front().second != i.second)break;
 		ilist.push_back(i.first);
 	}
-	uniform_int_distribution<> randin(0, (ilist.size() - 1));
+	std::uniform_int_distribution<> randin(0, (ilist.size() - 1));
 	return ilist.at(randin(this->mt));
 }

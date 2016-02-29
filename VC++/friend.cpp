@@ -1,28 +1,45 @@
 #include "som.h"
 
 void initializemap(imgdatas &imgd, somaps &smp) {
-	random_device rnd;
-	mt19937_64 mt(rnd());
-	uniform_int_distribution<> randc(0, imgd.size() - 1);
+	std::random_device rnd;
+	std::mt19937_64 mt(rnd());
+	std::uniform_int_distribution<> randc(0, imgd.size() - 1);
+	std::vector<imgdata*> matlist;
+	std::vector<std::pair<int, int>> xy;
+	somap *central = smp.at(smp.size() / 2).at(smp.data()->size() / 2);
+	central->init(imgd.at(randc(mt)));
+	central->getnearlist(imgd, matlist);
+	auto forsort = [&smp](std::pair<int, int> &x, std::pair<int, int> &y) -> bool {
+		auto dist = [&smp](std::pair<int, int> &x) ->int {
+			return std::abs(smp.data()->size() / 2 - x.first) + std::abs(smp.size()/2 - x.second); 
+		};
+		if (dist(x) > dist(y))return false;
+		if (dist(x) < dist(y))return true;
+		return false;
+	};
+	for (int i = 0; i < smp.size(); i++) {
+		for (int j = 0; j < smp.data()->size(); j++) {
+			xy.push_back({ j,i });
+		}
+	}
+	sort(xy.begin(), xy.end(),forsort);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
 #endif
-	for (int i = 0; i < smp.size(); i++) {
-		for (int j = 0; j < smp.data()->size(); j++) {
-			smp.at(i).at(j)->init(imgd.at(randc(mt)));
-		}
+	for (int i = 0; i < smp.size()*smp.data()->size();i++) {
+		smp.at(xy.at(i).second).at(xy.at(i).first)->init(*matlist.at(i));
 	}
 }
 
 void normalize(imgdatas &imgd){
-	array<vector<float>,F> allvec;
+	std::array<std::vector<float>,F> allvec;
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
 	for (int i = 0; i < F; i++) {
 		allvec.at(i).reserve(imgd.size());
 	}
-	array<map<float, float>,F> sample;
+	std::array<std::map<float, float>,F> sample;
 	auto load = [&allvec](imgdata &imgd) {
 #ifdef _OPENMP
 #pragma omp parallel for
@@ -39,9 +56,9 @@ void normalize(imgdatas &imgd){
 		sort(allvec.at(i).begin(), allvec.at(i).end());
 		auto result = unique(allvec.at(i).begin(), allvec.at(i).end());
 		allvec.at(i).erase(result, allvec.at(i).end());
-		cout << allvec.at(i).size() << "\n";
+		printf("%d\n", allvec.at(i).size());
 		for (int k = 0; k < allvec.at(i).size(); k++) {
-			sample.at(i).insert(make_pair(allvec.at(i).at(k), (k + 1) * 10));
+			sample.at(i).insert(std::make_pair(allvec.at(i).at(k), (k + 1)* 10));
 		}
 		allvec.at(i).clear();
 		allvec.at(i).shrink_to_fit();

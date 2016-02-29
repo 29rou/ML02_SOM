@@ -1,7 +1,7 @@
 #include "som.h"
 
 CTime combinedimg::theTime = CTime::GetCurrentTime();
-string combinedimg:: time  = ".\\output\\" + theTime.Format(_T("%d%H%M"));
+std::string combinedimg:: time  = ".\\output\\" + theTime.Format(_T("%d%H%M"));
 
 combinedimg::combinedimg()
 {
@@ -23,7 +23,7 @@ combinedimg::~combinedimg()
 
 void combinedimg::outputimg(const int count)
 {
-	string str = time + "\\output" + to_string(count) + ".jpg";
+	std::string str = time + "\\output" + std::to_string(count) + ".jpg";
 	printf("%s\n", str.c_str());
 	imwrite(str, this->cmbimg);
 	waitKey(1);
@@ -34,11 +34,11 @@ void combinedimg::toimg(imgdatas & imgd, somaps & smp)
 	Rect roi_rect;
 	roi_rect.width = W*WIDTH;
 	roi_rect.height = HEIGHT;
-	array<array<Mat*, W>,H> img;
-	array<array<vector<Mat*>, W>, H> distlist;
-	vector<Mat*> used;
+	std::array<std::array<Mat*, W>,H> img;
+	std::array<std::array<std::vector<Mat*>, W>, H> distlist;
+	std::vector<Mat*> used;
 	used.reserve(HW);
-	array<Mat, H> tmp;
+	std::array<Mat, H> tmp;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
 #endif

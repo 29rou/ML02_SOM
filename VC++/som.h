@@ -14,22 +14,21 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/objdetect/objdetect.hpp>
 
-using namespace std;
 using namespace cv;
 
 constexpr int  F = 1296;
 constexpr int F256 = (F / 8 + 1) * 8;
 constexpr int f = F256 / 8;
-constexpr int H = 50;
-constexpr int W = 50;
+constexpr int H = 53;
+constexpr int W = 53;
 constexpr int HW = H*W;
 constexpr int HEIGHT = 180;
 constexpr int WIDTH = 320;
 
 class somap;
 class imgdata;
-using imgdatas = vector<imgdata>;
-using somaps = array<array<somap*, W>, H>;
+using imgdatas = std::vector<imgdata>;
+using somaps = std::array<std::array<somap*, W>, H>;
 
 class sombase
 {
@@ -56,7 +55,7 @@ public:
 	const Mat* showimg() { return  &this->cmbimg; }
 private:
 	static CTime theTime;
-	static string time;
+	static std::string time;
 	Mat cmbimg;
 };
 
@@ -68,12 +67,13 @@ class somap :
 public:
 	somap();
 	~somap();
-	void setw(const int &count, const pair<int,int> &ptr, const int &x,const int &y);
+	void setw(const int &count, const std::pair<int,int> &ptr, const int &x,const int &y);
 	void train(const imgdata & obj);
 private:
 	float weight;
 	void init(imgdata &imgd);
-	void getnearlist(imgdatas & imgdata, vector<Mat*> &matlist);
+	void getnearlist(imgdatas & imgdata, std::vector<Mat*> &matlist);
+	void getnearlist(imgdatas & imgd, std:: vector<imgdata*>& matlist);
 };
 
 class imgdata :
@@ -85,8 +85,8 @@ class imgdata :
 public:
 	imgdata();
 	~imgdata();
-	void loadimg(const string &filepath);
-	const pair<int, int> findnear(somaps &smp);
+	void loadimg(const std::string &filepath);
+	const std::pair<int, int> findnear(somaps &smp);
 private:
 	Mat img;
 };
